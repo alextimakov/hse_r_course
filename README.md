@@ -2,9 +2,9 @@
 
 ## Act I - Basics
 - introduction, course goals and environment setup (2h)
-- statistics fundamentals: descriptives, distributions, hypothesis testing, data types | R base syntax (4h)
-- data preprocessing (objects / NULLs and outliers) | more R syntax (2h)
-- simple stat models (t-test / ANOVA / correlation / regression) and prerequisites (normality / iid / homoscedasticity) (4h)
+- data preprocessing (objects / NULLs and outliers) | R base syntax (2h)
+- statistics fundamentals: descriptives, distributions, hypothesis testing, data types | more R syntax (4h)
+- simple stat models (t-test / ANOVA / correlation / regression) and prerequisites (normality / iid / homoscedasticity) | more R syntax (4h)
 - Homework 1: EDA for given dataset (summary + correlations + lm) (8-12h)
 
 ## Act II - Advanced
