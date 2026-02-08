@@ -1,0 +1,113 @@
+# Seminar 1: Basics --------------------------------------------------------
+# Purpose: Descriptive statistics, central tendency, distributions, H0/errors
+# Dataset: datasets/october_orders.csv
+# Style: http://adv-r.had.co.nz/Style.html
+
+library(dplyr)
+library(ggplot2)
+
+# Load data ---------------------------
+
+orders <- read.csv("datasets/october_orders.csv", stringsAsFactors = FALSE)
+orders$lcl_dttm <- as.POSIXct(orders$lcl_dttm, format = "%Y-%m-%d %H:%M:%S")
+
+# Q1: Central tendency for assignment_min ---------------------------
+# Compare mean, median, and skew to recommend the best measure
+
+assignment_min <- orders$assignment_min[!is.na(orders$assignment_min)]
+mean_assign <- mean(assignment_min)
+median_assign <- median(assignment_min)
+skew_approx <- (mean_assign - median_assign) / sd(assignment_min)
+
+# According to a rule of thumb (-0.5 ... + 0.5), mean should be used in this case
+if (abs(skew_approx) > 0.5) {
+  best_central <- "median"
+} else {
+  best_central <- "mean"
+}
+best_central
+
+# But! for this scenario of right-skewed data, median will be more accurate (outliers pull the mean too much)
+# We can see this clearly on chart below
+orders_filtered <- orders %>% 
+  filter(!is.na(assignment_min) & assignment_min <= 5)
+ggplot(orders_filtered, aes(x = assignment_min)) +
+  geom_histogram(fill = "lightblue") +
+  geom_vline(xintercept = mean_assign, linetype="dashed", color = "red") + 
+  annotate("text", x=mean_assign+0.2, y=length(orders_filtered$assignment_min) / 3, label = "mean", color="red") +
+  geom_vline(xintercept = median_assign, linetype="dashed", color = "green") + 
+  annotate("text", x=median_assign+0.2, y=length(orders_filtered$assignment_min) / 3, label = "median", color="green") +
+  labs(title = "Assignment time distribution", y = "Frequency") + 
+  theme_minimal()
+
+# Q2: Standard deviation of arrival_min ---------------------------
+
+sd_arrival_overall <- sd(orders$arrival_min, na.rm = TRUE)
+sd_arrival_faster <- sd(orders$arrival_min[orders$tariff == "faster" & !is.na(orders$arrival_min)])
+
+sd_arrival_overall
+sd_arrival_faster
+
+# Q3: Normality of order_fare ---------------------------
+# Shapiro-Wilk is sensitive to sample size; will use a subsample if n > 5000
+
+order_fare_all <- orders$order_fare[orders$order_fare > 0 & !is.na(orders$order_fare)]
+order_fare_cancel <- orders$order_fare[orders$status == "cancel" & !is.na(orders$order_fare)]
+order_fare_cancel <- order_fare_cancel[order_fare_cancel >= 0]
+
+set.seed(42)
+n_sample <- min(5000, length(order_fare_all))
+shapiro_all <- shapiro.test(sample(order_fare_all, n_sample))
+# For cancel subset, run only if enough observations
+shapiro_cancel <- if (length(order_fare_cancel) >= 20) {
+  shapiro.test(sample(order_fare_cancel, n_sample))
+} else {
+  list(p.value = NA)
+}
+
+# p < 0.05 suggests deviation from normality
+normality_all <- shapiro_all$p.value >= 0.05
+# double check with a chart
+hist(order_fare_all)
+
+# order_fare for cancel is also not normal (right-skewed and many zeros, as expected)
+normality_cancel <- is.na(shapiro_cancel$p.value) || shapiro_cancel$p.value >= 0.05
+hist(order_fare_cancel)
+
+
+# Q4: IQR for arrival_min ---------------------------
+
+iqr_arrival <- IQR(orders$arrival_min, na.rm = TRUE)
+iqr_arrival
+
+# double check with the chart
+ggplot(orders, aes(y = arrival_min)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Arrival time distribution", y = "Frequency") + 
+  theme_minimal()
+
+# Q5: H0 for difference in order_fare by status ---------------------------
+# H0: There is no significant difference in the mean (or distribution) of order_fare
+#     between different statuses (e.g. success vs cancel)
+
+# Q6: Type I and Type II for H0 = no difference in assignment_min -------
+#      between last 2 weeks ---------------------------
+# Type I error (alpha): Reject H0 when H0 is true
+#   "We conclude there is a significant difference between the last 2 weeks when there isn't"
+# Type II error (beta): Fail to reject H0 when H0 is false
+#   "We conclude there is no significant difference when in fact there is"
+
+# Q7: Mode for order_fare ---------------------------
+# Mode is the most frequently occurring value
+
+order_fare_vec <- orders$order_fare[!is.na(orders$order_fare)]
+freq <- table(order_fare_vec)
+mode_order_fare <- as.numeric(names(freq)[which.max(freq)])
+mode_order_fare
+
+# Optional: function to compute mode for any numeric vector (using tabulate)
+get_mode <- function(x) {
+  uniqv <- unique(x)
+  uniqv[which.max(tabulate(match(x, uniqv)))]
+}
+get_mode(orders$order_fare)

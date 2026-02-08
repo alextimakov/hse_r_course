@@ -1,0 +1,137 @@
+# Seminar 3: Statistics Fundamentals --------------------------------------
+# Purpose: Normality/homoscedasticity, t-test, factor merge, group tests,
+#          smart ANOVA/Kruskal-Wallis, Bayesian ANOVA
+# Dataset: datasets/ifood_df.csv
+# Requires: dplyr, tidyr, car (Levene), BayesFactor (optional)
+# Style: http://adv-r.had.co.nz/Style.html
+
+library(dplyr)
+library(tidyr)
+library(car)
+
+df <- read.csv("datasets/ifood_df.csv", stringsAsFactors = FALSE)
+
+# Purchase columns for normality/homoscedasticity ---------------------------
+purchase_cols <- colnames(select(df, ends_with("Purchases")))
+
+# 1. Normality and homoscedasticity for purchase columns --------------------
+# Returns TRUE if any p-value < 0.05 (i.e. assumptions violated)
+
+norm_homosced_test <- function(dataframe) {
+  cols <- intersect(purchase_cols, names(dataframe))
+  if (length(cols) == 0) return(NA)
+
+  # Normality: Shapiro-Wilk on a sample (max 5000) per column
+  norm_pvals <- numeric(length(cols))
+  set.seed(42)
+  for (i in seq_along(cols)) {
+    x <- dataframe[[cols[i]]][!is.na(dataframe[[cols[i]]])]
+    x <- x[sample(length(x), min(5000, length(x)))]
+    if (length(x) >= 3) {
+      norm_pvals[i] <- shapiro.test(x)$p.value
+    } else {
+      norm_pvals[i] <- 1
+    }
+  }
+
+  # Homoscedasticity: need a grouping variable - let's use Education as a variable
+  long <- dataframe %>%
+    select(all_of(cols)) %>%
+    tidyr::pivot_longer(everything(), names_to = "variable", values_to = "value")
+  long <- long[!is.na(long$value), ]
+  if (nrow(long) < 10) return(TRUE)
+
+  # Use variable as group for Levene (homogeneity across purchase types)
+  tryCatch({
+    lev <- car::leveneTest(value ~ Education, data = long)
+    homo_pval <- lev[["Pr(>F)"]][1]
+  }, error = function(e) {
+    homo_pval <<- 1
+  })
+  if (!exists("homo_pval")) homo_pval <- 1
+
+  return(any(c(norm_pvals, homo_pval) < 0.05))
+}
+norm_homosced_test(df)
+
+# 2. One-sample t-test: group mean vs given mean ---------------------------
+
+compare_group_stat <- function(dataframe, column, given_mean) {
+  x <- dataframe[[column]]
+  x <- x[!is.na(x)]
+  t.test(x, mu = given_mean)$p.value
+}
+compare_group_stat(df, "NumWebPurchases", 4)
+
+# 3. Merge education_* columns into one factor ---------------------------
+
+gather_education <- function(dataframe) {
+  edu_idx <- grep("^education_", names(dataframe))
+  if (length(edu_idx) == 0) return(dataframe)
+
+  edu_mat <- as.matrix(dataframe[, edu_idx, drop = FALSE])
+  edu_names <- names(dataframe)[edu_idx]
+  edu_level <- apply(edu_mat, 1, function(x) {
+    w <- which(x == 1)
+    if (length(w) == 0) NA else edu_names[w]
+  })
+  education <- gsub("^education_", "", edu_level)
+  education <- factor(education)
+
+  out <- dataframe[, -edu_idx, drop = FALSE]
+  out$Education <- education
+  return(out)
+}
+df_edu <- gather_education(df)
+
+# 4. H0: No difference in Kidhome by Education ---------------------------
+# Use Kruskal-Wallis (robust to non-normality) or ANOVA
+
+test_h0_kidhome <- function(dataframe) {
+  d <- gather_education(dataframe)
+  k <- kruskal.test(Kidhome ~ Education, data = d)
+  return(k$p.value)
+}
+test_h0_kidhome(df_edu)
+
+# 5. H0: No difference in NumWebPurchases by Kidhome ---------------------------
+# Kidhome is numeric - treat as factor for group comparison
+
+test_h0_numwebpurchases <- function(dataframe) {
+  d <- dataframe
+  d$Kidhome_f <- factor(d$Kidhome)
+  k <- kruskal.test(NumWebPurchases ~ Kidhome_f, data = d)
+  return(k$p.value)
+}
+test_h0_numwebpurchases(df)
+
+# 6. ANOVA if assumptions met, else Kruskal-Wallis ---------------------------
+# Compare purchase columns across Education groups
+
+smart_var_test = function(dataframe, dependent, group) {
+  
+  x <- dataframe[[dependent]]
+  
+  # shapiro with sampling
+  norm_p = shapiro.test(x[sample(length(x), min(5000, length(x)))])$p.value
+  homo_p = bartlett.test(x ~ dataframe[[group]])$p.value
+  if (norm_p > 0.05 & homo_p > 0.05) {
+    test_result = aov(as.formula(paste(dependent, "~", group)), data = dataframe)
+    return(summary(test_result))
+  } else {
+    test_result = kruskal.test(as.formula(paste(dependent, "~", group)), data = dataframe)
+    
+    return(test_result)
+  }
+}
+smart_var_test(df_edu, "NumStorePurchases", "Education")
+
+# 7. Bayesian ANOVA on given numeric column ---------------------------
+
+bayes_anova <- function(dataframe, col, group) {
+  dataframe$y <- dataframe[[col]]
+  dataframe$group <- factor(dataframe[[group]])
+  dataframe <- dataframe[!is.na(dataframe$y), ]
+  BayesFactor::anovaBF(y ~ group, data = dataframe, progress = FALSE)
+}
+bayes_anova(df_edu, "NumStorePurchases", "Kidhome")
