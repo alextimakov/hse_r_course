@@ -1,0 +1,201 @@
+# Seminar 4: Correlation and Regression (Midterm) ---------------------------
+# Purpose: Normality/homogeneity, group comparisons, linear/logistic/mixed
+#          models, optimal OLS, optional Random Forest
+# Dataset: datasets/ifood_df.csv
+# Requires: dplyr, car, lme4, randomForest (optional)
+# Style: http://adv-r.had.co.nz/Style.html
+
+library(dplyr)
+library(car)
+library(caret)
+library(stringr)
+library(ggplot2)
+library(randomForest)
+library(lme4)
+library(MASS)
+
+df <- read.csv("datasets/ifood_df.csv", stringsAsFactors = FALSE)
+set.seed(42)
+
+# will need it for almost all tasks
+df$Response_f <- factor(df$Response)
+
+# helper: modified function from Seminar 3 to create Education/Marital factors from multiple columns
+gather_factor <- function(dataframe, factor_name) {
+  idx <- grep(paste(c("^", factor_name, "_"), collapse=""), names(dataframe))
+  if (length(idx) == 0) return(dataframe)
+  
+  mat <- as.matrix(dataframe[, idx, drop = FALSE])
+  names <- names(dataframe)[idx]
+  level <- apply(mat, 1, function(x) {
+    w <- which(x == 1)
+    if (length(w) == 0) NA else names[w]
+  })
+  final_factor <- gsub(paste(c("^", factor_name, "_"), collapse=""), "", level)
+  final_factor <- factor(final_factor)
+  
+  out <- dataframe[, -idx, drop = FALSE]
+  out[[str_to_sentence(factor_name)]] <- final_factor
+  return(out)
+}
+df <- gather_factor(df, "education")
+df <- gather_factor(df, "marital")
+
+# Q1: Normality and homogeneity for Income and MntWines ---------------------------
+
+income_ok <- df$Income[!is.na(df$Income)]
+mntwines_ok <- df$MntWines[!is.na(df$MntWines)]
+
+# Normality: Shapiro-Wilk with sampling
+shapiro_income <- shapiro.test(sample(income_ok, min(5000, length(income_ok))))
+shapiro_mntwines <- shapiro.test(sample(mntwines_ok, min(5000, length(mntwines_ok))))
+
+# Homogeneity: Levene by Response for Income and MntWines
+lev_income <- leveneTest(Income ~ Response_f, data = df)
+lev_mntwines <- leveneTest(MntWines ~ Response_f, data = df)
+
+# p < 0.05 suggests that none of the assumptions hold
+shapiro_income$p.value
+shapiro_mntwines$p.value
+lev_income[["Pr(>F)"]][1]
+lev_mntwines[["Pr(>F)"]][1]
+
+# double check with charts
+ggplot(df, aes(x = Income)) + 
+  geom_histogram(bins = 100, fill = "blue", alpha = 0.3) + 
+  ggtitle("Histogram of Income")
+
+# Q2: Difference in Income by Response ---------------------------
+
+# Use Man-Whitney since it is non-normal:
+wilcox.test(Income ~ Response_f, data = df)
+# Reject the null hypothesis and say that there is a difference in Income between groups by Response
+
+# Q3: Difference in NumDealsPurchases by Education ---------------------------
+
+# Since assumptions are violated - use Kruskal-Wallis test
+kruskal.test(NumDealsPurchases ~ Education, data = df)
+# Fail to reject the null hypothesis 
+# There is not enough statistical evidence to conclude that there is a significant difference in the number of deals purchased between different education levels
+
+# double check with charts
+ggplot(df, aes(x = Education, y = NumDealsPurchases, colour = Education)) +
+  geom_boxplot() +
+  labs(title = "Number of Deals Purchased by Education Level",
+       x = "Education Level",
+       y = "Number of Deals Purchased") + 
+  theme_minimal()
+
+# Q4: Model to predict Income from factor variables ---------------------------
+
+# Transform all needed columns into factor type
+factor_vars <- c(
+  "Education", "Response", "Marital", "Complain", "Kidhome", "Teenhome"
+  )
+df <- df %>%
+  mutate(across(factor_vars, as.factor))
+
+# Use these factors to construct a formula
+formula <- as.formula(paste("Income ~", paste(factor_vars, collapse = " + ")))
+
+# Summary of the model to predict Income
+summary(lm(formula, data = df))
+
+# Interpretation:
+# The most 'valuable' factors seems to be related to number of kids and education level
+# Overall adjusted R^2 = 0.36 is a pretty decent fit
+
+# Q5: Top-3 factors for Response (logistic) ---------------------------
+
+# Use numeric predictors that may influence campaign response
+pred_cols <- names(df)[sapply(df, is.numeric)]
+pred_cols <- intersect(pred_cols, names(df))
+fmla_resp <- as.formula(paste("Response_f ~", paste(pred_cols, collapse = " + ")))
+glm_resp <- glm(fmla_resp, data = df, family = binomial)
+coef_tab <- summary(glm_resp)$coefficients
+coef_tab <- coef_tab[rownames(coef_tab) != "(Intercept)", , drop = FALSE]
+top3 <- head(coef_tab[order(abs(coef_tab[, "z value"]), decreasing = TRUE), ], 3)
+top3
+
+# also can do it with RF approach
+# interestingly that results differ - though Recency is in both
+rf_model <- randomForest(Response_f ~ . - `Response`, data = df, importance = TRUE)
+importance_rf <- importance(rf_model)
+importance_df <- data.frame(Variable = rownames(importance_rf), Importance = importance_rf[, 1])
+importance_df <- importance_df %>% arrange(desc(Importance))
+
+top_factors <- head(importance_df, 3)
+top_factors
+
+# Q6: Fixed and random effects of Education and Marital on MntTotal --------
+
+# Fixed-effects model with Education * Marital
+lm_mnt <- lm(MntTotal ~ Education * Marital, data = df)
+summary(lm_mnt)
+
+# For true random effects (e.g. random intercept by customer segment)
+fixed_md <- lmer(MntTotal ~ Education * Marital + (1 | Education) + (1 | Marital), data = df)
+summary(fixed_md)
+
+# Q7: Optimal model for NumStorePurchases (adjusted R^2) ---------------------------
+
+# Stepwise or manual: start with many predictors, drop non-significant
+train_indices <- createDataPartition(df$NumStorePurchases, p = 0.8, list = FALSE)
+train_data <- df[train_indices, ]
+test_data <- df[-train_indices, ]
+lm_full <- lm(NumStorePurchases ~ ., data = train_data)
+summary(lm_full)$adj.r.squared
+summary(lm_full)
+
+# Now removing non-significant predictors
+lm_opt <- stepAIC(lm_full, direction = "both", trace = 0)
+summary(lm_opt)
+summary(lm_opt)$adj.r.squared # small improvement
+
+# Running optimized model on Test data
+predictions <- predict(lm_opt, newdata = test_data)
+model_performance <- postResample(predictions, test_data$NumStorePurchases)
+r_squared <- cor(test_data$NumStorePurchases, predictions)^2
+n <- nrow(test_data)
+p <- length(coef(lm_opt)) - 1
+
+# even better - 0.638, which is also consistent with train results (also good) 
+adjusted_r_squared <- 1 - ((1 - r_squared) * (n - 1) / (n - p - 1))
+adjusted_r_squared
+
+# Q8 (*): Optimal model for Income (adjusted R^2) ---------------------------
+
+# Just a small run
+lm_full_2 <- lm(Income ~ ., data = df)
+lm_opt_2 <- stepAIC(lm_full_2, direction = "both", trace = 0)
+
+# It seems like it is more reliable to predict Income from this dataset
+summary(lm_opt_2)$adj.r.squared
+
+# Q9 (*): Random Forest for AcceptedCmp1 ---------------------------
+
+# make column a factor, exclude all AcceptedCmp*
+df$AcceptedCmp1_f <- as.factor(df$AcceptedCmp1)
+preds_rf <- names(df)[sapply(df, is.numeric)]
+matches <- str_detect(preds_rf, "AcceptedCmp*")
+preds_rf <- preds_rf[!matches]
+preds_rf <- intersect(preds_rf, names(df))
+
+# clean and do a train-test split
+df_rf <- df[complete.cases(df[, c("AcceptedCmp1_f", preds_rf)]), ]
+train_indices <- createDataPartition(df_rf$AcceptedCmp1_f, p = 0.8, list = FALSE)
+train_data <- df_rf[train_indices, ]
+test_data <- df_rf[-train_indices, ]
+
+rf_fit <- randomForest(
+  AcceptedCmp1_f ~ .,
+  data = train_data[, c("AcceptedCmp1_f", preds_rf)],
+  ntree = 100
+)
+rf_fit
+
+# Confusion matrix, accuracy for Test data - pretty solid 93.6%
+# Bad specificity though
+predictions <- as.factor(predict(rf_fit, newdata = test_data))
+confusion_matrix <- confusionMatrix(predictions, test_data$AcceptedCmp1_f)
+confusion_matrix

@@ -1,0 +1,132 @@
+# Seminar 5: Complexity Reduction, PCA, EFA, MDS, Clustering, Classification
+# Purpose: learn PCA vs MDS, EFA, clusterization and classifier
+# Dataset: datasets/ifood_df.csv
+# Requires: dplyr, psych, MASS, randomForest (or stats for kmeans)
+# Style: http://adv-r.had.co.nz/Style.html
+
+library(dplyr)
+library(ggplot2)
+library(randomForest)
+library(psych)
+
+df <- read.csv("datasets/ifood_df.csv", stringsAsFactors = FALSE)
+set.seed(42)
+
+# Exclude constant columns for PCA/MDS/EFA -----------
+constant_columns <- sapply(df, function(x) var(x) == 0)
+df <- df[, !constant_columns] 
+
+# Q1: PCA and MDS, comment on efficiency/relevance ---------------------------
+
+# PCA: captures variance in linear combinations
+# Efficient for high-dimensional numeric data and gives variance interpretation
+pca_fit <- prcomp(df, scale. = TRUE)
+pca_scores <- as.data.frame(pca_fit$x)
+summary(pca_fit)
+
+# Variance explained by first few components
+cumsum(pca_fit$sdev^2) / sum(pca_fit$sdev^2)
+plot(pca_fit, type = 'l')
+
+# double check with a chart
+ggplot(pca_scores, aes(x = PC1, y = PC2)) +
+  geom_point() +
+  labs(title = "Two Principles Components derived by the Elbow rule") +
+  theme_minimal()
+
+# MDS: preserves pairwise distances
+# Relevant when distance between observations is meaningful (e.g. perceptual mapping)
+d <- dist(scale(df))
+mds_fit <- cmdscale(d, k = 2)
+mds_scores <- as.data.frame(mds_fit)
+
+# double check with a chart
+ggplot(mds_scores, aes(x = V1, y = V2)) +
+  geom_point() +
+  labs(title = "MDS for two dimensions")
+
+# Q2: Exploratory Factor Analysis on numeric variables ---------------------------
+
+# Use a subset of columns to avoid singularity; omit highly correlated
+fa_cols <- c(
+  "Income", "MntWines", "MntFruits", "NumDealsPurchases",
+  "NumWebPurchases", "NumStorePurchases", "NumWebVisitsMonth"
+)
+fa_cols <- intersect(fa_cols, names(df_num))
+df_fa <- df_num[, fa_cols]
+df_fa <- df_fa[complete.cases(df_fa), ]
+n_factors <- 2
+efa_fit <- psych::fa(df_fa, nfactors = n_factors, rotate = "varimax", fm = "ml")
+print(efa_fit)
+# Interpretation: loadings show which variables define each factor
+# e.g. factor 1 might be "total spending", factor 2 "channel usage"
+
+# Q3: Cluster clients to predict/explain Income ---------------------------
+
+# Optimal (maybe): k-means on scaled numeric features
+# k-means because it is fast, scalable, and segment means are interpretable
+df_clus <- scale(df)
+k <- 3
+km <- kmeans(df_clus, centers = k, nstart = 25)
+df_clus_data <- df
+df_clus_data$cluster <- factor(km$cluster)
+
+# Mean Income by cluster (clustering "predicts" segment, Income varies by it)
+# Not really consistent, but still
+income_by_cluster <- aggregate(Income ~ cluster, data = df_clus_data, FUN = mean)
+income_by_cluster
+
+# double check by a chart
+ggplot(df_clus_data, aes(x = Age, y = Kidhome, color = cluster)) +
+  geom_point() +
+  labs(title = "Clustering Results", x = "Age", y = "MntTotal") +
+  theme_minimal()
+
+# Q4: Classifier for Response (Accuracy and F1) ---------------------------
+
+df_cls <- df
+df_cls$Response_f <- factor(df_cls$Response)
+preds <- c(
+  "Income", "Recency", "NumDealsPurchases", "NumWebPurchases",
+  "NumCatalogPurchases", "NumStorePurchases", "NumWebVisitsMonth",
+  "MntWines", "MntTotal", "Age", "Kidhome"
+)
+preds <- intersect(preds, names(df_cls))
+df_cls <- df_cls[complete.cases(df_cls[, c("Response_f", preds)]), ]
+
+# train-test split
+train_indices <- createDataPartition(df_cls$Response_f, p = 0.8, list = FALSE)
+train_data <- df_rf[train_indices, ]
+test_data <- df_rf[-train_indices, ]
+
+# Function to check the final results
+show_results <- function(test_dataframe, pred_test_data) {
+  confusionMatrix <- confusionMatrix(pred_test_data, test_dataframe$Response_f)
+  accuracy <- confusionMatrix$overall['Accuracy']
+  tp <- confusionMatrix$table[1, 1]
+  fp <- confusionMatrix$table[2, 1]
+  fn <- confusionMatrix$table[1, 2]
+  precision_1 <- tp / (tp + fp)
+  recall_1 <- tp / (tp + fn)
+  f1_1 <- 2 * precision_1 * recall_1 / (precision_1 + recall_1)
+  cat("Accuracy:", accuracy, "\n")
+  cat("F1 (Response=1):", f1_1, "\n")
+}
+
+# Can be done either with RandomForest
+rf_cls <- randomForest(
+  Response_f ~ .,
+  data = train_data[, c("Response_f", preds)],
+  ntree = 100
+)
+pred_test_rf <- predict(rf_cls, test_data)
+
+# Or just GLM
+glm_cls <- glm(Response_f ~ ., data = train_data[, c("Response_f", preds)],
+               family = binomial)
+pred_p <- predict(glm_cls, test_data, type = "response")
+pred_test_glm <- factor(ifelse(pred_p > 0.5, 1, 0), levels = c(0, 1))
+
+# More or less adequate accuracy and F1 (almost identical)
+show_results(test_data, pred_test_rf)
+show_results(test_data, pred_test_glm)
