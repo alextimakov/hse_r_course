@@ -2,6 +2,9 @@
 # Includes packages for seminars 1-6 (Rmd) and general course use.
 
 required_packages <- c(
+  "arules",        # Seminar 6: Association Rules
+  "apollo",        # Seminar 6: Choice Modeling
+  "arulesViz",     # Seminar 6: Association Rules visualization
   "BayesFactor",   # Seminar 3: Bayesian ANOVA
   "car",           # Seminars 3-4: Levene, etc.
   "caret",         # Seminars 4-6: createDataPartition, confusionMatrix
@@ -12,6 +15,9 @@ required_packages <- c(
   "gdata",         # General
   "ggplot2",       # Seminars 1-2, 4-6
   "knitr",         # Rmd knitting
+  "lavaan",        # Seminar 6: SEM
+  "sem",           # Seminar 6: SEM
+  "OpenMx",        # Seminar 6: SEM
   "lme4",          # Seminar 4: mixed effects
   "MASS",          # Seminar 4: stepAIC
   "parallel",      # General
@@ -19,6 +25,7 @@ required_packages <- c(
   "randomForest",  # Seminars 4-6
   "rmarkdown",     # Rmd to HTML/PDF
   "ROSE",          # Seminar 6: imbalanced data
+  "mlogit",        # Seminar 6: Choice Modeling
   "stringr",       # Seminar 4: str_to_sentence, str_detect
   "tidyr",         # Seminar 3: pivot_longer, etc.
   "tidyverse"      # General (includes dplyr, tidyr, ggplot2, ...)
