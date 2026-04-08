@@ -1,14 +1,14 @@
 # Advanced Marketing Models on R '24
 
 ## Overview
-- 2 acts - first act is dedicated to basics, second act is dedicated to advanced topics
-- Homework assignments after each seminar
+- 2 acts: first act is dedicated to basics, second act is dedicated to advanced topics
+- Homework assignments after each seminar, quizes during seminars
 - Grading scheme: 0.25 * Class Quizzes + 0.25 * Class Practice Cases + 0.25 * Midterm Exam + 0.25 * Final Exam
 
 ## Seminar 1: Basics
 - introduction, course goals and organizational aspects
 - briefly on 'how it may be helpful for business' and data-driven decision-making
-- sampling
+- sampling (techniques and difference with population)
 - understanding your data (types, descriptive statistics, distributions)
 - experiment design and statistical significance
 - R environment setup
