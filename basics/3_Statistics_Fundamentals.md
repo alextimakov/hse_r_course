@@ -1,7 +1,7 @@
 ## Seminar 3
 
 ### 1. Hypothesis Testing Basics in R
-_ Motivation for business to run a statistical test (e.g. A/B testing, comparing customer segments, etc.)
+- Motivation for business to run a statistical test (e.g. A/B testing, comparing customer segments, etc.)
 - Hypothesis testing workflow: state hypotheses (H0 and H1) -> choose test -> check assumptions -> run test -> interpret results
 - Null hypothesis (H0): default assumption, typically "no effect" or "no difference"
 - Alternative hypothesis (H1): what we want to prove, directional or non-directional
@@ -25,11 +25,11 @@ _ Motivation for business to run a statistical test (e.g. A/B testing, comparing
 - **Checking**: Levene's test, Bartlett's test, visual inspection of residuals
 - **Solutions if violated**: Welch's t-test (unequal variances), non-parametric tests, transformations
 
-### 5. Parametric Tests: 2 categorical variables
+### 5. Categorical Tests: 2 categorical variables
 - **Chi-square test of independence**: test association between two categorical variables
 - **Chi-square goodness-of-fit**: test if observed frequencies match expected frequencies
 - **Fisher's exact test**: test for association between two categorical variables when sample size is small
-- No normality assumption (works with frequency tables)
+- No normality assumption (works with frequency tables), since those are non-parametric tests
 - Marketing application: testing relationships between customer demographics and preferences, brand association
 
 ### 6. Parametric Tests: 1-2 samples (numeric dependent variable)
@@ -40,21 +40,20 @@ _ Motivation for business to run a statistical test (e.g. A/B testing, comparing
 - Marketing application: A/B testing, comparing customer segments
 
 ### 7. Non-Parametric Tests: 2 samples (numeric dependent variable)
-- **Mann-Whitney U Test (a.k.a Wilcoxon rank-sum test)**: alternative to independent samples t-test when normality assumption violated
-- **Wilcoxon signed-rank test**: non-parametric alternative to paired t-test
-- Alternative to independent samples T-tests when normality assumption violated
-- Tests whether two independent groups differ in their distributions
+- **Mann-Whitney U Test (a.k.a. Wilcoxon rank-sum test)**: alternative to independent samples t-test when normality assumption violated; tests whether two independent groups differ in their distributions
+- **Wilcoxon signed-rank test**: non-parametric alternative to paired t-test; for paired / matched samples
 
 ### 8. (Non-)Parametric Tests: 3+ samples
 - **One-way ANOVA**: compare means across three or more groups
 - **Two-way ANOVA**: examine effects of two factors and their interaction
 - **Repeated measures ANOVA**: multiple measurements on same subjects
-- **Kruskal-Wallis test**: alternative to one-way ANOVA when normality assumption violated
-- Assumptions: normality, independence, homoscedasticity
+- **Kruskal-Wallis test**: non-parametric alternative to one-way ANOVA when normality assumption violated
+- **ANOVA assumptions**: normality, independence, homoscedasticity (Kruskal-Wallis does not require normality or equal variances)
 - Marketing application: comparing multiple marketing channels, campaign variations
 
 ### 9. Test Selection Guide
 - **Parametric tests**: more powerful when assumptions met, require interval/ratio data
 - **Non-parametric tests**: robust to violations, work with ordinal data, less powerful
+- **Categorical tests**: chi-square / Fisher's exact for associations between categorical variables
 - Choose based on: data type, sample size, distribution shape, research question
 - When in doubt with small samples or non-normal data: prefer non-parametric
